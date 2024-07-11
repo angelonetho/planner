@@ -16,8 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +23,9 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/trips")
 public class TripController {
+
+    @Autowired
+    private TripService tripService;
 
     @Autowired
     private ParticipantService participantService;
@@ -40,52 +41,51 @@ public class TripController {
 
     @PostMapping
     public ResponseEntity<TripCreateResponse> createTrip(@RequestBody TripRequestPayload payload) {
-        Trip newTrip = new Trip(payload);
-        this.repository.save(newTrip);
 
-        this.participantService.registerParticipantsToEvent(payload.emails_to_invite(), newTrip);
+        Optional<TripCreateResponse> tripCreateResponse = tripService.registerTrip(payload);
 
-        return ResponseEntity.ok(new TripCreateResponse(newTrip.getId()));
+        return tripCreateResponse.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.badRequest().build());
+
 
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Trip> getTripDetails(@PathVariable UUID id) {
-        Optional<Trip> trip = this.repository.findById(id);
+    public ResponseEntity<TripData> getTripDetails(@PathVariable UUID id) {
+        Optional<TripData> tripData = this.tripService.getTripFromId(id);
 
-        return trip.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+        return tripData.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Trip> updateTrip(@PathVariable UUID id, @RequestBody TripRequestPayload payload) {
+    public ResponseEntity<TripData> updateTrip(@PathVariable UUID id, @RequestBody TripRequestPayload payload) {
         Optional<Trip> trip = this.repository.findById(id);
 
         if (trip.isPresent()) {
             Trip rawTrip = trip.get();
-            rawTrip.setEndsAt(LocalDateTime.parse(payload.ends_at(), DateTimeFormatter.ISO_DATE_TIME));
-            rawTrip.setStartsAt(LocalDateTime.parse(payload.starts_at(), DateTimeFormatter.ISO_DATE_TIME));
-            rawTrip.setDestination(payload.destination());
 
-            this.repository.save(rawTrip);
+            Optional<TripData> tripData = tripService.updateTrip(rawTrip, payload);
 
-            return ResponseEntity.ok(rawTrip);
+            if (tripData.isPresent()) {
+                return tripData.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.badRequest().build());
+            }
         }
 
         return ResponseEntity.notFound().build();
     }
 
     @GetMapping("/{id}/confirm")
-    public ResponseEntity<Trip> confirmTrip(@PathVariable UUID id) {
+    public ResponseEntity<TripData> confirmTrip(@PathVariable UUID id) {
         Optional<Trip> trip = this.repository.findById(id);
 
         if (trip.isPresent()) {
             Trip rawTrip = trip.get();
-            rawTrip.setIsConfirmed(true);
 
-            this.repository.save(rawTrip);
+            TripData tripData = tripService.confirmTrip(rawTrip);
+
             this.participantService.triggerConfirmationEmailToParticipants(id);
 
-            return ResponseEntity.ok(rawTrip);
+            return ResponseEntity.ok(tripData);
         }
 
         return ResponseEntity.notFound().build();
@@ -98,9 +98,10 @@ public class TripController {
         if (trip.isPresent()) {
             Trip rawTrip = trip.get();
 
-            ActivityResponse activityResponse = this.activityService.registerActivity(payload, rawTrip);
+            Optional<ActivityResponse> activityResponse = this.activityService.registerActivity(payload, rawTrip);
 
-            return ResponseEntity.ok(activityResponse);
+            return activityResponse.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.badRequest().build());
+
         }
 
         return ResponseEntity.notFound().build();

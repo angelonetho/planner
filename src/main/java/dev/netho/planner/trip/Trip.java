@@ -45,6 +45,6 @@ public class Trip {
         this.owner_email = data.owner_email();
         this.owner_name = data.owner_name();
         this.startsAt = LocalDateTime.parse(data.starts_at(), DateTimeFormatter.ISO_DATE_TIME);
-        this.endsAt = LocalDateTime.parse(data.starts_at(), DateTimeFormatter.ISO_DATE_TIME);
+        this.endsAt = LocalDateTime.parse(data.ends_at(), DateTimeFormatter.ISO_DATE_TIME);
     }
 }
